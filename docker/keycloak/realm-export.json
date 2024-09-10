@@ -1,0 +1,23 @@
+{
+    "realm": "apisix",
+    "enabled": true,
+    "sslRequired": "external",
+    "registrationAllowed": false,
+    "privateKey": "MIIEowIBAAKCAQEAiU...",
+    "publicKey": "MIIBIjANBgkqhki...",
+    "clients": [
+      {
+        "clientId": "apisix",
+        "enabled": true,
+        "clientAuthenticatorType": "client-secret",
+        "secret": "${KEYCLOAK_CLIENT_SECRET}",
+        "redirectUris": [
+          "https://${DOMAIN}/*"
+        ],
+        "webOrigins": [
+          "https://${DOMAIN}"
+        ],
+        "protocol": "openid-connect"
+      }
+    ]
+  }
