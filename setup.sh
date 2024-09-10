@@ -87,11 +87,99 @@ echo "GRAFANA_ADMIN_PASSWORD=$ADMIN_PASSWORD" >> .env
 echo "APISIX_DASHBOARD_USER=$ADMIN_USER" >> .env
 echo "APISIX_DASHBOARD_PASSWORD=$ADMIN_PASSWORD" >> .env
 
+print_status "Preparando arquivos de configuração..."
+
+# Nginx configuration
+mkdir -p docker/nginx
+cat > docker/nginx/nginx.conf << EOL
+server {
+    listen 80;
+    server_name DOMAIN_PLACEHOLDER;
+    return 301 https://\$server_name\$request_uri;
+}
+
+server {
+    listen 443 ssl;
+    server_name DOMAIN_PLACEHOLDER;
+
+    ssl_certificate /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/privkey.pem;
+
+    location / {
+        proxy_pass http://apisix:9080;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+
+    location /apisix/dashboard {
+        proxy_pass http://apisix-dashboard:9000;
+        proxy_set_header Host \$host;
+        proxy_set_header X-Real-IP \$remote_addr;
+        proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto \$scheme;
+    }
+}
+EOL
+
+# Dashboard configuration
+mkdir -p docker/dashboard
+cat > docker/dashboard/conf.yaml << EOL
+conf:
+  listen:
+    host: 0.0.0.0
+    port: 9000
+  etcd:
+    endpoints:
+      - "etcd:2379"
+  log:
+    error_log:
+      level: warn
+      file_path: logs/error.log
+    access_log:
+      file_path: logs/access.log
+authentication:
+  secret: ADMIN_PASSWORD_PLACEHOLDER
+  expire_time: 3600
+  users:
+    - username: ADMIN_USER_PLACEHOLDER
+      password: ADMIN_PASSWORD_PLACEHOLDER
+EOL
+
+# Keycloak configuration
+mkdir -p docker/keycloak
+cat > docker/keycloak/realm-export.json << EOL
+{
+  "realm": "apisix",
+  "enabled": true,
+  "sslRequired": "external",
+  "registrationAllowed": false,
+  "privateKey": "MIIEowIBAAKCAQEAiU...",
+  "publicKey": "MIIBIjANBgkqhki...",
+  "clients": [
+    {
+      "clientId": "apisix",
+      "enabled": true,
+      "clientAuthenticatorType": "client-secret",
+      "secret": "ADMIN_PASSWORD_PLACEHOLDER",
+      "redirectUris": [
+        "https://DOMAIN_PLACEHOLDER/*"
+      ],
+      "webOrigins": [
+        "https://DOMAIN_PLACEHOLDER"
+      ],
+      "protocol": "openid-connect"
+    }
+  ]
+}
+EOL
+
 print_status "Substituindo variáveis nos arquivos de configuração..."
 # Substituir variáveis nos arquivos de configuração
-sed -i "s/\${DOMAIN}/$domain/g" docker/nginx/nginx.conf
-sed -i "s/\${ADMIN_USER}/$ADMIN_USER/g" docker/dashboard/conf.yaml docker/keycloak/realm-export.json
-sed -i "s/\${ADMIN_PASSWORD}/$ADMIN_PASSWORD/g" docker/dashboard/conf.yaml docker/keycloak/realm-export.json
+sed -i "s|DOMAIN_PLACEHOLDER|$domain|g" docker/nginx/nginx.conf docker/keycloak/realm-export.json
+sed -i "s|ADMIN_USER_PLACEHOLDER|$ADMIN_USER|g" docker/dashboard/conf.yaml
+sed -i "s|ADMIN_PASSWORD_PLACEHOLDER|$ADMIN_PASSWORD|g" docker/dashboard/conf.yaml docker/keycloak/realm-export.json
 
 print_status "Iniciando os serviços..."
 # Iniciar o Nginx primeiro
