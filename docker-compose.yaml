@@ -16,7 +16,7 @@ services:
       - etcd
 
   apisix-dashboard:
-    image: apache/apisix-dashboard:3.0.1
+    image: apache/apisix-dashboard:latest
     volumes:
       - ./docker/dashboard/conf.yaml:/usr/local/apisix-dashboard/conf/conf.yaml:ro
     environment:

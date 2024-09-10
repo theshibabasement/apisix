@@ -1,7 +1,15 @@
 #!/bin/bash
 
+set -e
+
+# Função para imprimir mensagens de status
+print_status() {
+    echo "--- $1"
+}
+
 # Função para verificar e abrir portas
 check_and_open_ports() {
+    print_status "Verificando e abrindo portas..."
     local ports=(80 443 9080 9180 9090 9091 2379 8080 3000)
     for port in "${ports[@]}"; do
         if ! sudo ufw status | grep -q "$port"; then
@@ -12,12 +20,15 @@ check_and_open_ports() {
         fi
     done
     sudo ufw reload
+    print_status "Verificação de portas concluída"
 }
 
 # Função para solicitar e validar domínio
 get_domain() {
+    print_status "Solicitando informações do domínio..."
     while true; do
-        read -p "Digite o domínio que será utilizado: " domain
+        read -p "Digite o domínio que será utilizado (ex: apisix.lime.my.id): " domain
+        echo "Domínio digitado: $domain"
         read -p "Você confirma que o DNS já está configurado para o servidor? (s/n): " confirm
         if [[ $confirm =~ ^[Ss]$ ]]; then
             break
@@ -30,12 +41,14 @@ get_domain() {
 
 # Função para solicitar informações do Certbot
 get_certbot_info() {
+    print_status "Solicitando informações do Certbot..."
     read -p "Digite seu endereço de e-mail para o Certbot: " email
     echo $email
 }
 
 # Função para solicitar credenciais
 get_credentials() {
+    print_status "Solicitando credenciais..."
     while true; do
         read -p "Digite o nome de usuário para todas as aplicações: " username
         read -s -p "Digite a senha para todas as aplicações: " password
@@ -59,6 +72,7 @@ domain=$(get_domain)
 email=$(get_certbot_info)
 credentials=$(get_credentials)
 
+print_status "Configurando variáveis de ambiente..."
 # Configurar variáveis de ambiente
 echo "DOMAIN=$domain" > .env
 echo "EMAIL=$email" >> .env
@@ -73,23 +87,33 @@ echo "GRAFANA_ADMIN_PASSWORD=$ADMIN_PASSWORD" >> .env
 echo "APISIX_DASHBOARD_USER=$ADMIN_USER" >> .env
 echo "APISIX_DASHBOARD_PASSWORD=$ADMIN_PASSWORD" >> .env
 
+print_status "Substituindo variáveis nos arquivos de configuração..."
 # Substituir variáveis nos arquivos de configuração
 sed -i "s/\${DOMAIN}/$domain/g" docker/nginx/nginx.conf
 sed -i "s/\${ADMIN_USER}/$ADMIN_USER/g" docker/dashboard/conf.yaml docker/keycloak/realm-export.json
 sed -i "s/\${ADMIN_PASSWORD}/$ADMIN_PASSWORD/g" docker/dashboard/conf.yaml docker/keycloak/realm-export.json
 
-# Iniciar os serviços
-docker-compose up -d
+print_status "Iniciando os serviços..."
+# Iniciar o Nginx primeiro
+docker-compose up -d nginx
 
+print_status "Aguardando Nginx iniciar..."
+sleep 10  # Dar tempo para o Nginx iniciar completamente
+
+print_status "Gerando certificados SSL..."
 # Gerar certificados SSL
 docker-compose run --rm certbot certonly --webroot -w /var/www/certbot \
-    --email $email --agree-tos --no-eff-email \
+    --email $email --agree-tos --no-eff-email --force-renewal \
     -d $domain -d www.$domain
 
-# Reiniciar Nginx para aplicar os certificados
-docker-compose restart nginx
+print_status "Reiniciando todos os serviços..."
+docker-compose up -d
 
-echo "Instalação concluída. Acesse:"
+print_status "Verificando status dos serviços..."
+docker-compose ps
+
+print_status "Instalação concluída!"
+echo "Acesse:"
 echo "- APISIX: https://$domain"
 echo "- APISIX Dashboard: https://$domain/apisix/dashboard"
 echo "- Keycloak: https://$domain:8080"
@@ -98,3 +122,15 @@ echo ""
 echo "Use as seguintes credenciais para todas as aplicações:"
 echo "Usuário: $ADMIN_USER"
 echo "Senha: $ADMIN_PASSWORD"
+
+print_status "Se algum serviço não estiver rodando, você pode tentar reiniciá-lo com:"
+echo "docker-compose restart <nome_do_serviço>"
+
+print_status "Para ver os logs de um serviço específico, use:"
+echo "docker-compose logs <nome_do_serviço>"
+
+print_status "Para ver os logs de todos os serviços, use:"
+echo "docker-compose logs"
+
+print_status "Lembre-se de configurar seu DNS para apontar para o IP deste servidor."
+echo "IP do servidor: $(curl -s ifconfig.me)"
