@@ -80,12 +80,12 @@ echo "ADMIN_USER=$(echo $credentials | cut -d':' -f1)" >> .env
 echo "ADMIN_PASSWORD=$(echo $credentials | cut -d':' -f2)" >> .env
 
 # Usar as mesmas credenciais para todas as aplicações
-echo "KEYCLOAK_USER=$ADMIN_USER" >> .env
-echo "KEYCLOAK_PASSWORD=$ADMIN_PASSWORD" >> .env
-echo "GRAFANA_ADMIN_USER=$ADMIN_USER" >> .env
-echo "GRAFANA_ADMIN_PASSWORD=$ADMIN_PASSWORD" >> .env
-echo "APISIX_DASHBOARD_USER=$ADMIN_USER" >> .env
-echo "APISIX_DASHBOARD_PASSWORD=$ADMIN_PASSWORD" >> .env
+echo "KEYCLOAK_USER=\$ADMIN_USER" >> .env
+echo "KEYCLOAK_PASSWORD=\$ADMIN_PASSWORD" >> .env
+echo "GRAFANA_ADMIN_USER=\$ADMIN_USER" >> .env
+echo "GRAFANA_ADMIN_PASSWORD=\$ADMIN_PASSWORD" >> .env
+echo "APISIX_DASHBOARD_USER=\$ADMIN_USER" >> .env
+echo "APISIX_DASHBOARD_PASSWORD=\$ADMIN_PASSWORD" >> .env
 
 print_status "Preparando arquivos de configuração..."
 
@@ -177,48 +177,12 @@ EOL
 
 print_status "Substituindo variáveis nos arquivos de configuração..."
 # Substituir variáveis nos arquivos de configuração
-sed -i "s|DOMAIN_PLACEHOLDER|$domain|g" docker/nginx/nginx.conf docker/keycloak/realm-export.json
-sed -i "s|ADMIN_USER_PLACEHOLDER|$ADMIN_USER|g" docker/dashboard/conf.yaml
-sed -i "s|ADMIN_PASSWORD_PLACEHOLDER|$ADMIN_PASSWORD|g" docker/dashboard/conf.yaml docker/keycloak/realm-export.json
+sed -i "s/DOMAIN_PLACEHOLDER/$domain/g" docker/nginx/nginx.conf docker/keycloak/realm-export.json
+sed -i "s/ADMIN_USER_PLACEHOLDER/$ADMIN_USER/g" docker/dashboard/conf.yaml
+sed -i "s/ADMIN_PASSWORD_PLACEHOLDER/$ADMIN_PASSWORD/g" docker/dashboard/conf.yaml docker/keycloak/realm-export.json
 
 print_status "Iniciando os serviços..."
 # Iniciar o Nginx primeiro
 docker-compose up -d nginx
 
-print_status "Aguardando Nginx iniciar..."
-sleep 10  # Dar tempo para o Nginx iniciar completamente
-
-print_status "Gerando certificados SSL..."
-# Gerar certificados SSL
-docker-compose run --rm certbot certonly --webroot -w /var/www/certbot \
-    --email $email --agree-tos --no-eff-email --force-renewal \
-    -d $domain -d www.$domain
-
-print_status "Reiniciando todos os serviços..."
-docker-compose up -d
-
-print_status "Verificando status dos serviços..."
-docker-compose ps
-
-print_status "Instalação concluída!"
-echo "Acesse:"
-echo "- APISIX: https://$domain"
-echo "- APISIX Dashboard: https://$domain/apisix/dashboard"
-echo "- Keycloak: https://$domain:8080"
-echo "- Grafana: http://$domain:3000"
-echo ""
-echo "Use as seguintes credenciais para todas as aplicações:"
-echo "Usuário: $ADMIN_USER"
-echo "Senha: $ADMIN_PASSWORD"
-
-print_status "Se algum serviço não estiver rodando, você pode tentar reiniciá-lo com:"
-echo "docker-compose restart <nome_do_serviço>"
-
-print_status "Para ver os logs de um serviço específico, use:"
-echo "docker-compose logs <nome_do_serviço>"
-
-print_status "Para ver os logs de todos os serviços, use:"
-echo "docker-compose logs"
-
-print_status "Lembre-se de configurar seu DNS para apontar para o IP deste servidor."
-echo "IP do servidor: $(curl -s ifconfig.me)"
+print_status "
