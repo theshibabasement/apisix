@@ -44,7 +44,8 @@ services:
     entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
 
   keycloak:
-    image: jboss/keycloak:16.1.1
+    image: keycloak/keycloak
+
     environment:
       - KEYCLOAK_USER=${ADMIN_USER}
       - KEYCLOAK_PASSWORD=${ADMIN_PASSWORD}
@@ -58,7 +59,7 @@ services:
       - "-Dkeycloak.import=/opt/jboss/keycloak/imports/realm-export.json"
 
   prometheus:
-    image: prom/prometheus:v2.30.3
+    image: prom/prometheus:v2.54.1
     volumes:
       - ./docker/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
     ports:
