@@ -71,21 +71,23 @@ check_and_open_ports
 domain=$(get_domain)
 email=$(get_certbot_info)
 credentials=$(get_credentials)
+username=$(echo $credentials | cut -d':' -f1)
+password=$(echo $credentials | cut -d':' -f2)
 
 print_status "Configurando variáveis de ambiente..."
 # Configurar variáveis de ambiente
 echo "DOMAIN=$domain" > .env
 echo "EMAIL=$email" >> .env
-echo "ADMIN_USER=$(echo $credentials | cut -d':' -f1)" >> .env
-echo "ADMIN_PASSWORD=$(echo $credentials | cut -d':' -f2)" >> .env
+echo "ADMIN_USER=$username" >> .env
+echo "ADMIN_PASSWORD=$password" >> .env
 
 # Usar as mesmas credenciais para todas as aplicações
-echo "KEYCLOAK_USER=$(echo $credentials | cut -d':' -f1)" >> .env
-echo "KEYCLOAK_PASSWORD=$(echo $credentials | cut -d':' -f2)" >> .env
-echo "GRAFANA_ADMIN_USER=$(echo $credentials | cut -d':' -f1)" >> .env
-echo "GRAFANA_ADMIN_PASSWORD=$(echo $credentials | cut -d':' -f2)" >> .env
-echo "APISIX_DASHBOARD_USER=$(echo $credentials | cut -d':' -f1)" >> .env
-echo "APISIX_DASHBOARD_PASSWORD=$(echo $credentials | cut -d':' -f2)" >> .env
+echo "KEYCLOAK_USER=$username" >> .env
+echo "KEYCLOAK_PASSWORD=$password" >> .env
+echo "GRAFANA_ADMIN_USER=$username" >> .env
+echo "GRAFANA_ADMIN_PASSWORD=$password" >> .env
+echo "APISIX_DASHBOARD_USER=$username" >> .env
+echo "APISIX_DASHBOARD_PASSWORD=$password" >> .env
 
 print_status "Preparando arquivos de configuração..."
 
@@ -94,16 +96,16 @@ mkdir -p docker/nginx
 cat > docker/nginx/nginx.conf << EOL
 server {
     listen 80;
-    server_name DOMAIN_PLACEHOLDER;
+    server_name $domain;
     return 301 https://\$server_name\$request_uri;
 }
 
 server {
     listen 443 ssl;
-    server_name DOMAIN_PLACEHOLDER;
+    server_name $domain;
 
-    ssl_certificate /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/fullchain.pem;
-    ssl_certificate_key /etc/letsencrypt/live/DOMAIN_PLACEHOLDER/privkey.pem;
+    ssl_certificate /etc/letsencrypt/live/$domain/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/$domain/privkey.pem;
 
     location / {
         proxy_pass http://apisix:9080;
@@ -140,11 +142,11 @@ conf:
     access_log:
       file_path: logs/access.log
 authentication:
-  secret: ADMIN_PASSWORD_PLACEHOLDER
+  secret: $password
   expire_time: 3600
   users:
-    - username: ADMIN_USER_PLACEHOLDER
-      password: ADMIN_PASSWORD_PLACEHOLDER
+    - username: $username
+      password: $password
 EOL
 
 # Keycloak configuration
@@ -162,24 +164,18 @@ cat > docker/keycloak/realm-export.json << EOL
       "clientId": "apisix",
       "enabled": true,
       "clientAuthenticatorType": "client-secret",
-      "secret": "ADMIN_PASSWORD_PLACEHOLDER",
+      "secret": "$password",
       "redirectUris": [
-        "https://DOMAIN_PLACEHOLDER/*"
+        "https://$domain/*"
       ],
       "webOrigins": [
-        "https://DOMAIN_PLACEHOLDER"
+        "https://$domain"
       ],
       "protocol": "openid-connect"
     }
   ]
 }
 EOL
-
-print_status "Substituindo variáveis nos arquivos de configuração..."
-# Substituir variáveis nos arquivos de configuração
-sed -i "s|DOMAIN_PLACEHOLDER|$domain|g" docker/nginx/nginx.conf docker/keycloak/realm-export.json
-sed -i "s|ADMIN_USER_PLACEHOLDER|$(echo $credentials | cut -d':' -f1)|g" docker/dashboard/conf.yaml
-sed -i "s|ADMIN_PASSWORD_PLACEHOLDER|$(echo $credentials | cut -d':' -f2)|g" docker/dashboard/conf.yaml docker/keycloak/realm-export.json
 
 print_status "Iniciando os serviços..."
 # Iniciar o Nginx primeiro
@@ -208,8 +204,8 @@ echo "- Keycloak: https://$domain:8080"
 echo "- Grafana: http://$domain:3000"
 echo ""
 echo "Use as seguintes credenciais para todas as aplicações:"
-echo "Usuário: $(echo $credentials | cut -d':' -f1)"
-echo "Senha: $(echo $credentials | cut -d':' -f2)"
+echo "Usuário: $username"
+echo "Senha: $password"
 
 print_status "Se algum serviço não estiver rodando, você pode tentar reiniciá-lo com:"
 echo "docker-compose restart <nome_do_serviço>"
